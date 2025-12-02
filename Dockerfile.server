@@ -1,0 +1,45 @@
+# Dockerfile pour le serveur multiparty-meeting
+FROM node:20-slim
+
+# Installer les dépendances système nécessaires pour mediasoup
+RUN apt-get update && apt-get install -y \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Créer le répertoire de travail
+WORKDIR /app
+
+# Copier les fichiers package.json
+COPY server/package*.json ./server/
+
+# Installer les dépendances du serveur
+WORKDIR /app/server
+RUN npm ci --only=production
+
+# Copier le code du serveur
+WORKDIR /app
+COPY server/ ./server/
+
+# Créer le répertoire pour les logs
+RUN mkdir -p /app/logs
+
+# Créer le répertoire pour les certificats (peut être monté en volume)
+RUN mkdir -p /app/server/certs
+
+# Exposer les ports
+# 3443 : HTTPS
+# 3000 : HTTP redirect
+# 40000-49999 : WebRTC UDP/TCP (sera géré par network_mode: host ou ports)
+EXPOSE 3443 3000
+
+# Variables d'environnement par défaut
+ENV NODE_ENV=production
+ENV DEBUG=*mediasoup* *INFO* *WARN* *ERROR*
+ENV INTERACTIVE=false
+
+# Commande de démarrage
+WORKDIR /app/server
+CMD ["npm", "start"]
+

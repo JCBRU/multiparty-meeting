@@ -1,0 +1,97 @@
+# Configuration Caddy pour multiparty-meeting avec reverse proxy et load balancing
+# Placez ce fichier dans /etc/caddy/Caddyfile ou utilisez-le avec caddy run --config Caddyfile
+
+# Domaine principal
+your-domain.com {
+	# Encodage
+	encode gzip zstd
+
+	# Headers de sécurité
+	header {
+		# Désactiver CSP pour permettre les WebRTC
+		-Server
+		-Content-Security-Policy
+		# Headers pour le reverse proxy
+		X-Forwarded-Proto {scheme}
+		X-Forwarded-Host {host}
+		X-Real-IP {remote_host}
+	}
+
+	# Health check endpoint
+	handle /health {
+		reverse_proxy localhost:3443 {
+			health_uri /health
+			health_interval 30s
+			health_timeout 5s
+		}
+	}
+
+	# WebSocket pour Socket.io (important pour le load balancing)
+	# Socket.io v4 utilise le transport WebSocket par défaut
+	handle /socket.io/* {
+		reverse_proxy localhost:3443 localhost:3444 localhost:3445 {
+			# Sticky sessions pour WebSocket (CRITIQUE pour Socket.io)
+			lb_policy ip_hash
+			
+			# Headers pour le reverse proxy
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Port {port}
+			
+			# Configuration WebSocket explicite
+			transport http {
+				versions h2c 1.1
+				# Timeouts augmentés pour WebSocket long-lived
+				read_timeout 600s
+				write_timeout 600s
+			}
+		}
+	}
+
+	# Fichiers statiques avec cache
+	handle /static/* {
+		reverse_proxy localhost:3443 localhost:3444 localhost:3445 {
+			lb_policy round_robin
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host {host}
+			header_up X-Real-IP {remote_host}
+		}
+		header Cache-Control "public, max-age=31536000, immutable"
+	}
+
+	# Toutes les autres requêtes
+	handle {
+		reverse_proxy localhost:3443 localhost:3444 localhost:3445 {
+			# Load balancing avec sticky sessions basées sur IP
+			lb_policy ip_hash
+			
+			# Headers pour le reverse proxy
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Port {port}
+			
+			# Health check
+			health_uri /health
+			health_interval 30s
+			health_timeout 5s
+			health_status 200
+			
+			# Timeouts augmentés pour WebRTC
+			transport http {
+				read_timeout 600s
+				write_timeout 600s
+				dial_timeout 10s
+			}
+		}
+	}
+}
+
+# Redirection HTTP vers HTTPS (automatique avec Caddy, mais on peut être explicite)
+http://your-domain.com {
+	redir https://your-domain.com{uri}
+}
+

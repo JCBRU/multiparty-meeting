@@ -1,0 +1,134 @@
+# Configuration Caddy pour Haute Disponibilité (HA)
+# Deux instances : GRA et SBG avec failover automatique
+
+meeting.example.com {
+	# Compression
+	encode gzip zstd
+
+	# Headers de sécurité et reverse proxy
+	header {
+		-Server
+		-Content-Security-Policy
+		X-Forwarded-Proto {scheme}
+		X-Forwarded-Host {host}
+		X-Real-IP {remote_host}
+	}
+
+	# Health check endpoint
+	handle /health {
+		reverse_proxy gra-instance:3443 sbg-instance:3443 {
+			# Essayer GRA en premier, puis SBG en cas d'échec
+			lb_policy first
+			
+			health_uri /health
+			health_interval 10s
+			health_timeout 5s
+			health_status 200
+			
+			# Failover automatique
+			fail_duration 30s
+			max_fails 3
+			
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host {host}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	# WebSocket pour Socket.io avec failover
+	handle /socket.io/* {
+		reverse_proxy gra-instance:3443 sbg-instance:3443 {
+			# Essayer GRA en premier
+			lb_policy first
+			
+			# Headers pour le reverse proxy
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Port {port}
+			
+			# Configuration WebSocket
+			transport http {
+				versions h2c 1.1
+				read_timeout 600s
+				write_timeout 600s
+			}
+			
+			# Health check et failover
+			health_uri /health
+			health_interval 10s
+			fail_duration 30s
+			max_fails 3
+		}
+	}
+
+	# Fichiers statiques avec cache
+	handle /static/* {
+		reverse_proxy gra-instance:3443 sbg-instance:3443 {
+			lb_policy first
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host {host}
+			header_up X-Real-IP {remote_host}
+			
+			health_uri /health
+			health_interval 10s
+			fail_duration 30s
+			max_fails 3
+		}
+		header Cache-Control "public, max-age=31536000, immutable"
+	}
+
+	# Toutes les autres requêtes avec failover
+	handle {
+		reverse_proxy gra-instance:3443 sbg-instance:3443 {
+			# Essayer GRA en premier, puis SBG en cas d'échec
+			lb_policy first
+			
+			# Headers pour le reverse proxy
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Port {port}
+			
+			# Health check et failover
+			health_uri /health
+			health_interval 10s
+			health_timeout 5s
+			health_status 200
+			fail_duration 30s
+			max_fails 3
+			
+			# Timeouts augmentés
+			transport http {
+				read_timeout 600s
+				write_timeout 600s
+				dial_timeout 10s
+			}
+		}
+	}
+}
+
+# Redirection HTTP vers HTTPS
+http://meeting.example.com {
+	redir https://meeting.example.com{uri}
+}
+
+# Configuration alternative : Routing géographique avec DNS
+# Si vous avez des sous-domaines pour chaque région
+
+# meeting-gra.example.com {
+#     reverse_proxy gra-instance:3443 {
+#         health_uri /health
+#         health_interval 10s
+#     }
+# }
+#
+# meeting-sbg.example.com {
+#     reverse_proxy sbg-instance:3443 {
+#         health_uri /health
+#         health_interval 10s
+#     }
+# }
+

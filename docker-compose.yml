@@ -1,0 +1,81 @@
+version: "3.8"
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: multiparty-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: multiparty-frontend
+    ports:
+      - "8080:80" # Nginx sur le port 80 du container, mappé sur 8080 de l'hôte
+    volumes:
+      # Optionnel : pour servir les fichiers de config dynamiques
+      - ./app/public/config:/usr/share/nginx/html/config:ro
+    restart: unless-stopped
+    depends_on:
+      - server
+    networks:
+      - multiparty-network
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: multiparty-server
+    # IMPORTANT : network_mode: host pour les ports WebRTC UDP
+    # Alternative : exposer les ports individuellement (voir commentaires ci-dessous)
+    network_mode: host
+    # Si vous ne pouvez pas utiliser network_mode: host, décommentez les lignes suivantes :
+    # ports:
+    #   - "3443:3443"  # HTTPS
+    #   - "3000:3000"  # HTTP redirect
+    #   - "40000-49999:40000-49999/udp"  # WebRTC UDP
+    #   - "40000-49999:40000-49999/tcp"  # WebRTC TCP
+    environment:
+      - NODE_ENV=production
+      - DEBUG=*mediasoup* *INFO* *WARN* *ERROR*
+      - INTERACTIVE=false
+      - REDIS_HOST=${REDIS_HOST:-localhost} # Avec network_mode: host, utiliser localhost
+      - REDIS_PORT=${REDIS_PORT:-6379}
+    volumes:
+      - ./server/certs:/app/server/certs:ro # Certificats TLS
+      - ./server/public:/app/server/public:ro # Fichiers statiques (si build séparé)
+      - server_logs:/app/logs # Logs
+    restart: unless-stopped
+    depends_on:
+      - redis
+    # Health check
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://localhost:3443/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  redis_data:
+  server_logs:
+
+networks:
+  multiparty-network:
+    driver: bridge

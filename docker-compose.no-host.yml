@@ -1,0 +1,74 @@
+# Alternative docker-compose sans network_mode: host
+# ATTENTION : Cette configuration expose beaucoup de ports UDP/TCP
+# Recommandé uniquement si network_mode: host n'est pas possible
+
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: multiparty-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - multiparty-network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: multiparty-frontend
+    ports:
+      - "8080:80"
+    volumes:
+      - ./app/public/config:/usr/share/nginx/html/config:ro
+    restart: unless-stopped
+    depends_on:
+      - server
+    networks:
+      - multiparty-network
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: multiparty-server
+    # SANS network_mode: host - exposition de tous les ports
+    ports:
+      - "3443:3443"  # HTTPS
+      - "3000:3000"  # HTTP redirect
+      # WebRTC ports - ATTENTION : beaucoup de ports !
+      - "40000-49999:40000-49999/udp"
+      - "40000-49999:49999/tcp"
+    environment:
+      - NODE_ENV=production
+      - DEBUG=*mediasoup* *INFO* *WARN* *ERROR*
+      - INTERACTIVE=false
+      - REDIS_HOST=redis  # Utiliser le nom du service Docker
+      - REDIS_PORT=6379
+    volumes:
+      - ./server/certs:/app/server/certs:ro
+      - ./server/public:/app/server/public:ro
+      - server_logs:/app/logs
+    restart: unless-stopped
+    depends_on:
+      - redis
+    networks:
+      - multiparty-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3443/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  redis_data:
+  server_logs:
+
+networks:
+  multiparty-network:
+    driver: bridge
+

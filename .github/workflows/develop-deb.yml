@@ -24,7 +24,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: "npm" # Cache npm dependencies
+          # Cache disabled - lock files (yarn.lock) are in subdirectories app/ and server/
+          # and we use npm install, not yarn
 
       - name: Get eduMEET version
         id: get-version

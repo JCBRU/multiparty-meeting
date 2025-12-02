@@ -1,10 +1,16 @@
 name: Debian package
 
-on:
-  push:
-    branches: [master]
+# Workflow désactivé - ne se déclenche plus automatiquement
+# Pour le réactiver, décommentez la section 'on:' ci-dessous
+# on:
+#   push:
+#     branches: [master]
 #  pull_request:
 #    branches: [ develop ]
+
+# Workflow désactivé - aucun déclencheur actif
+on:
+  workflow_dispatch: # Permet de déclencher manuellement depuis l'interface GitHub si nécessaire
 
 jobs:
   build:

@@ -1,7 +1,7 @@
 import React from 'react';
 import PropTypes from 'prop-types';
 import classnames from 'classnames';
-import { withStyles } from '@material-ui/core/styles';
+import { withStyles } from '@mui/styles';
 import EditableInput from '../Controls/EditableInput';
 import Logger from '../../Logger';
 import { yellow, orange, red } from '@material-ui/core/colors';

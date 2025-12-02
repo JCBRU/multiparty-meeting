@@ -1,24 +1,30 @@
 import React from 'react';
 import { connect } from 'react-redux';
 import {
-	lobbyPeersKeySelector,
-	makePermissionSelector
-} from '../../../store/selectors';
-import { permissions } from '../../../permissions';
+	lobbyPeersKeySelector
+} from '../../Selectors';
 import * as appPropTypes from '../../appPropTypes';
-import { withStyles } from '@material-ui/core/styles';
+import { withStyles } from '@mui/styles';
 import { withRoomContext } from '../../../RoomContext';
-import * as roomActions from '../../../store/actions/roomActions';
+import * as roomActions from '../../../actions/roomActions';
 import PropTypes from 'prop-types';
 import { FormattedMessage } from 'react-intl';
-import Dialog from '@material-ui/core/Dialog';
-import DialogTitle from '@material-ui/core/DialogTitle';
-import DialogActions from '@material-ui/core/DialogActions';
-import DialogContent from '@material-ui/core/DialogContent';
-import DialogContentText from '@material-ui/core/DialogContentText';
-import Button from '@material-ui/core/Button';
-import List from '@material-ui/core/List';
-import ListSubheader from '@material-ui/core/ListSubheader';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
+import Button from '@mui/material/Button';
+// import FormLabel from '@mui/material/FormLabel';
+// import FormControl from '@mui/material/FormControl';
+// import FormGroup from '@mui/material/FormGroup';
+// import FormControlLabel from '@mui/material/FormControlLabel';
+// import Checkbox from '@mui/material/Checkbox';
+// import InputLabel from '@mui/material/InputLabel';
+// import OutlinedInput from '@mui/material/OutlinedInput';
+// import Switch from '@mui/material/Switch';
+import List from '@mui/material/List';
+import ListSubheader from '@mui/material/ListSubheader';
 import ListLobbyPeer from './ListLobbyPeer';
 
 const styles = (theme) =>
@@ -53,11 +59,11 @@ const styles = (theme) =>
 	});
 
 const LockDialog = ({
-	roomClient,
+	// roomClient,
 	room,
 	handleCloseLockDialog,
+	// handleAccessCode,
 	lobbyPeers,
-	canPromote,
 	classes
 }) =>
 {
@@ -65,7 +71,7 @@ const LockDialog = ({
 		<Dialog
 			className={classes.root}
 			open={room.lockDialogOpen}
-			onClose={() => handleCloseLockDialog(false)}
+			onClose={() => handleCloseLockDialog({ lockDialogOpen: false })}
 			classes={{
 				paper : classes.dialogPaper
 			}}
@@ -76,8 +82,56 @@ const LockDialog = ({
 					defaultMessage='Lobby administration'
 				/>
 			</DialogTitle>
+			{/*
+			<FormControl component='fieldset' className={classes.formControl}>
+				<FormLabel component='legend'>Room lock</FormLabel>
+				<FormGroup>
+					<FormControlLabel
+						control={
+							<Switch checked={room.locked} onChange={() => 
+							{
+								if (room.locked)
+								{
+									roomClient.unlockRoom();
+								}
+								else
+								{
+									roomClient.lockRoom();
+								}
+							}}
+							/>}
+						label='Lock'
+					/>
+						TODO: access code
+					<FormControlLabel disabled={ room.locked ? false : true } 
+						control={
+							<Checkbox checked={room.joinByAccessCode} 
+								onChange={
+									(event) => roomClient.setJoinByAccessCode(event.target.checked)
+								}
+							/>}
+						label='Join by Access code'
+					/>
+					<InputLabel htmlFor='access-code-input' />
+					<OutlinedInput 
+						disabled={ room.locked ? false : true }
+						id='acces-code-input'
+						label='Access code'
+						labelWidth={0}
+						variant='outlined'
+						value={room.accessCode}
+						onChange={(event) => handleAccessCode(event.target.value)}
+					>
+					</OutlinedInput>
+					<Button onClick={() => roomClient.setAccessCode(room.accessCode)} color='primary'>
+							save
+					</Button>
+					
+				</FormGroup>
+			</FormControl>
+			*/}
 			{ lobbyPeers.length > 0 ?
-				<List
+				<List 
 					dense
 					subheader={
 						<ListSubheader component='div'>
@@ -106,21 +160,7 @@ const LockDialog = ({
 				</DialogContent>
 			}
 			<DialogActions>
-				<Button
-					disabled={
-						lobbyPeers.length === 0 ||
-						!canPromote ||
-						room.lobbyPeersPromotionInProgress
-					}
-					onClick={() => roomClient.promoteAllLobbyPeers()}
-					color='primary'
-				>
-					<FormattedMessage
-						id='label.promoteAllPeers'
-						defaultMessage='Promote all'
-					/>
-				</Button>
-				<Button onClick={() => handleCloseLockDialog(false)} color='primary'>
+				<Button onClick={() => handleCloseLockDialog({ lockDialogOpen: false })} color='primary'>
 					<FormattedMessage
 						id='label.close'
 						defaultMessage='Close'
@@ -133,29 +173,20 @@ const LockDialog = ({
 
 LockDialog.propTypes =
 {
-	roomClient            : PropTypes.object.isRequired,
+	// roomClient            : PropTypes.any.isRequired,
 	room                  : appPropTypes.Room.isRequired,
 	handleCloseLockDialog : PropTypes.func.isRequired,
 	handleAccessCode      : PropTypes.func.isRequired,
 	lobbyPeers            : PropTypes.array,
-	canPromote            : PropTypes.bool,
 	classes               : PropTypes.object.isRequired
 };
 
-const makeMapStateToProps = () =>
+const mapStateToProps = (state) =>
 {
-	const hasPermission = makePermissionSelector(permissions.PROMOTE_PEER);
-
-	const mapStateToProps = (state) =>
-	{
-		return {
-			room       : state.room,
-			lobbyPeers : lobbyPeersKeySelector(state),
-			canPromote : hasPermission(state)
-		};
+	return {
+		room       : state.room,
+		lobbyPeers : lobbyPeersKeySelector(state)
 	};
-
-	return mapStateToProps;
 };
 
 const mapDispatchToProps = {
@@ -164,16 +195,19 @@ const mapDispatchToProps = {
 };
 
 export default withRoomContext(connect(
-	makeMapStateToProps,
+	mapStateToProps,
 	mapDispatchToProps,
 	null,
 	{
 		areStatesEqual : (next, prev) =>
 		{
 			return (
-				prev.room === next.room &&
-				prev.me.roles === next.me.roles &&
-				prev.peers === next.peers &&
+				prev.room.locked === next.room.locked &&
+				prev.room.joinByAccessCode === next.room.joinByAccessCode &&
+				prev.room.accessCode === next.room.accessCode &&
+				prev.room.code === next.room.code &&
+				prev.room.lockDialogOpen === next.room.lockDialogOpen &&
+				prev.room.codeHidden === next.room.codeHidden &&
 				prev.lobbyPeers === next.lobbyPeers
 			);
 		}

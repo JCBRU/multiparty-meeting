@@ -1,161 +1,145 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { connect } from 'react-redux';
-import { makePeerConsumerSelector } from '../../../store/selectors';
-import { withStyles } from '@material-ui/core/styles';
-import * as roomActions from '../../../store/actions/roomActions';
+import { makePeerConsumerSelector } from '../../Selectors';
+import { withStyles } from '@mui/styles';
 import PropTypes from 'prop-types';
+import classnames from 'classnames';
 import * as appPropTypes from '../../appPropTypes';
 import { withRoomContext } from '../../../RoomContext';
-import { useIntl, FormattedMessage } from 'react-intl';
-import classnames from 'classnames';
-import { green } from '@material-ui/core/colors';
-import Popover from '@material-ui/core/Popover';
-import Paper from '@material-ui/core/Paper';
-import MenuItem from '@material-ui/core/MenuItem';
-import IconButton from '@material-ui/core/IconButton';
-import Tooltip from '@material-ui/core/Tooltip';
-import VideocamIcon from '@material-ui/icons/Videocam';
-import VideocamOffIcon from '@material-ui/icons/VideocamOff';
-import MicIcon from '@material-ui/icons/Mic';
-import MicOffIcon from '@material-ui/icons/MicOff';
-import VolumeUpIcon from '@material-ui/icons/VolumeUp';
-import VolumeDownIcon from '@material-ui/icons/VolumeDown';
-import VolumeOffIcon from '@material-ui/icons/VolumeOff';
-import ScreenIcon from '@material-ui/icons/ScreenShare';
-import ScreenOffIcon from '@material-ui/icons/StopScreenShare';
-import ExitIcon from '@material-ui/icons/ExitToApp';
+import { useIntl } from 'react-intl';
+import IconButton from '@mui/material/IconButton';
+import MicIcon from '@mui/icons-material/Mic';
+import MicOffIcon from '@mui/icons-material/MicOff';
+import ScreenIcon from '@mui/icons-material/ScreenShare';
+import ScreenOffIcon from '@mui/icons-material/StopScreenShare';
 import EmptyAvatar from '../../../images/avatar-empty.jpeg';
-import PanIcon from '@material-ui/icons/PanTool';
-import RemoveFromQueueIcon from '@material-ui/icons/RemoveFromQueue';
-import AddToQueueIcon from '@material-ui/icons/AddToQueue';
-import RecordVoiceOverIcon from '@material-ui/icons/RecordVoiceOver';
-import AccountTreeIcon from '@material-ui/icons/AccountTree';
-import MoreIcon from '@material-ui/icons/MoreVert';
-import Typography from '@material-ui/core/Typography';
-import Divider from '@material-ui/core/Divider';
-import ListItem from '@material-ui/core/ListItem';
-import Slider from '@material-ui/core/Slider';
+import HandIcon from '../../../images/icon-hand-white.svg';
 
 const styles = (theme) =>
 	({
 		root :
 		{
+			padding  : theme.spacing(1),
 			width    : '100%',
 			overflow : 'hidden',
 			cursor   : 'auto',
 			display  : 'flex'
 		},
+		listPeer :
+		{
+			display : 'flex'
+		},
 		avatar :
 		{
 			borderRadius : '50%',
-			height       : '2rem',
-			width        : '2rem',
-			objectFit    : 'cover',
-			marginTop    : theme.spacing(0.5)
+			height       : '2rem'
 		},
 		peerInfo :
 		{
 			fontSize    : '1rem',
+			border      : 'none',
 			display     : 'flex',
 			paddingLeft : theme.spacing(1),
 			flexGrow    : 1,
 			alignItems  : 'center'
 		},
-		indicator :
+		indicators :
 		{
-			margin : theme.spacing(1)
+			left           : 0,
+			top            : 0,
+			display        : 'flex',
+			flexDirection  : 'row',
+			justifyContent : 'flex-start',
+			alignItems     : 'center',
+			transition     : 'opacity 0.3s'
 		},
-		buttons :
+		icon :
 		{
-			padding : theme.spacing(1)
+			flex               : '0 0 auto',
+			margin             : '0.3rem',
+			borderRadius       : 2,
+			backgroundPosition : 'center',
+			backgroundSize     : '75%',
+			backgroundRepeat   : 'no-repeat',
+			backgroundColor    : 'rgba(0, 0, 0, 0.5)',
+			transitionProperty : 'opacity, background-color',
+			transitionDuration : '0.15s',
+			width              : 'var(--media-control-button-size)',
+			height             : 'var(--media-control-button-size)',
+			opacity            : 0.85,
+			'&:hover'          :
+			{
+				opacity : 1
+			},
+			'&.on' :
+			{
+				opacity : 1
+			},
+			'&.off' :
+			{
+				opacity : 0.2
+			},
+			'&.raise-hand' :
+			{
+				backgroundImage : `url(${HandIcon})`
+			}
 		},
-		moreAction :
+		controls :
 		{
-			margin : theme.spacing(0.5, 0, 0.5, 1.5)
+			float          : 'right',
+			display        : 'flex',
+			flexDirection  : 'row',
+			justifyContent : 'flex-start',
+			alignItems     : 'center'
 		},
-		moreActionsHeader :
+		button :
 		{
-			fontWeight  : 700,
-			marginLeft  : theme.spacing(2),
-			marginRight : theme.spacing(2),
-			marginTop   : theme.spacing(1)
-		},
-		moderator :
-		{
-			color : 'rgba(220, 0, 78, 1)'
+			flex               : '0 0 auto',
+			margin             : '0.3rem',
+			borderRadius       : 2,
+			backgroundColor    : 'rgba(0, 0, 0, 0.5)',
+			cursor             : 'pointer',
+			transitionProperty : 'opacity, background-color',
+			transitionDuration : '0.15s',
+			width              : 'var(--media-control-button-size)',
+			height             : 'var(--media-control-button-size)',
+			opacity            : 0.85,
+			'&:hover'          :
+			{
+				opacity : 1
+			},
+			'&.unsupported' :
+			{
+				pointerEvents : 'none'
+			},
+			'&.disabled' :
+			{
+				pointerEvents   : 'none',
+				backgroundColor : 'var(--media-control-botton-disabled)'
+			},
+			'&.on' :
+			{
+				backgroundColor : 'var(--media-control-botton-on)'
+			},
+			'&.off' :
+			{
+				backgroundColor : 'var(--media-control-botton-off)'
+			}
 		}
 	});
-
-const VolumeSlider = withStyles(
-	{
-		root :
-		{
-			color   : '#3880ff',
-			height  : 2,
-			padding : '15px 0'
-		},
-		track : {
-			height : 2
-		},
-		rail : {
-			height  : 2,
-			opacity : 0.2
-		},
-		mark : {
-			backgroundColor : '#bfbfbf',
-			height          : 10,
-			width           : 3,
-			marginTop       : -3
-		},
-		markActive : {
-			opacity         : 1,
-			backgroundColor : 'currentColor'
-		}
-	})(Slider);
 
 const ListPeer = (props) =>
 {
 	const intl = useIntl();
 
-	const [ anchorEl, setAnchorEl ] = useState(null);
-	const [ currentMenu, setCurrentMenu ] = useState(null);
-
-	const handleExited = () =>
-	{
-		setCurrentMenu(null);
-	};
-
-	const handleMenuOpen = (event, menu) =>
-	{
-		setAnchorEl(event.currentTarget);
-		setCurrentMenu(menu);
-	};
-
-	const handleMenuClose = () =>
-	{
-		setAnchorEl(null);
-	};
-
 	const {
 		roomClient,
-		isModerator,
-		spotlight,
 		peer,
-		mode,
-		openRolesManager,
 		micConsumer,
-		webcamConsumer,
 		screenConsumer,
-		isSelected,
 		children,
 		classes
 	} = props;
-
-	const webcamEnabled = (
-		Boolean(webcamConsumer) &&
-		!webcamConsumer.locallyPaused &&
-		!webcamConsumer.remotelyPaused
-	);
 
 	const micEnabled = (
 		Boolean(micConsumer) &&
@@ -171,8 +155,6 @@ const ListPeer = (props) =>
 
 	const picture = peer.picture || EmptyAvatar;
 
-	const isMenuOpen = Boolean(anchorEl);
-
 	return (
 		<div className={classes.root}>
 			<img alt='Peer avatar' className={classes.avatar} src={picture} />
@@ -180,363 +162,80 @@ const ListPeer = (props) =>
 			<div className={classes.peerInfo}>
 				{peer.displayName}
 			</div>
-			{ peer.raisedHand &&
-				<IconButton
-					className={classes.buttons}
-					style={{ color: green[500] }}
-					disabled={!isModerator || peer.raisedHandInProgress}
-					onClick={() =>
-					{
-						roomClient.lowerPeerHand(peer.id);
-					}}
-				>
-					<PanIcon />
-				</IconButton>
-			}
-			{ isSelected ?
-				<Tooltip
-					title={intl.formatMessage({
-						id             : 'tooltip.inSpotlight',
-						defaultMessage : 'In spotlight'
-					})}
-				>
-					<IconButton
-						className={classes.buttons}
-						style={{ color: green[500] }}
-						onClick={() =>
-						{
-							roomClient.removeSelectedPeer(peer.id);
-						}}
-					>
-						<AddToQueueIcon />
-					</IconButton>
-				</Tooltip>
-				:
-				spotlight &&
-					<Tooltip
-						title={intl.formatMessage({
-							id             : 'tooltip.isSpeaker',
-							defaultMessage : 'Active speaker'
-						})}
-					>
-						<RecordVoiceOverIcon
-							className={classes.indicator}
-							style={{ color: green[500] }}
-						/>
-					</Tooltip>
-			}
-			<Tooltip
-				title={intl.formatMessage({
-					id             : 'tooltip.muteParticipant',
-					defaultMessage : 'Mute audio'
-				})}
-				placement='bottom'
-			>
-				<IconButton
-					aria-label={intl.formatMessage({
-						id             : 'tooltip.muteParticipant',
-						defaultMessage : 'Mute audio'
-					})}
-					color={micEnabled ? 'primary' : 'secondary'}
-					disabled={peer.peerAudioInProgress}
-					className={classes.buttons}
-					onClick={() =>
-					{
-						micEnabled ?
-							roomClient.modifyPeerConsumer(peer.id, 'mic', true) :
-							roomClient.modifyPeerConsumer(peer.id, 'mic', false);
-					}}
-				>
-					{ micEnabled ?
-						<VolumeUpIcon />
-						:
-						<VolumeOffIcon />
+			<div className={classes.indicators}>
+				{ peer.raiseHandState &&
+					<div className={
+						classnames(
+							classes.icon, 'raise-hand', {
+								on  : peer.raiseHandState,
+								off : !peer.raiseHandState
+							}
+						)
 					}
-				</IconButton>
-			</Tooltip>
+					/>
+				}
+			</div>
 			{children}
-			<Tooltip
-				title={intl.formatMessage({
-					id             : 'label.moreActions',
-					defaultMessage : 'More actions'
-				})}
-			>
-				<IconButton
-					aria-haspopup
-					onClick={(event) => handleMenuOpen(event, 'moreActions')}
-					color='inherit'
-					className={classes.buttons}
-				>
-					<MoreIcon />
-				</IconButton>
-			</Tooltip>
-			<Popover
-				anchorEl={anchorEl}
-				anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-				transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-				open={isMenuOpen}
-				onClose={handleMenuClose}
-				onExited={handleExited}
-				getContentAnchorEl={null}
-			>
-				{ currentMenu === 'moreActions' &&
-					<Paper>
-						<Typography className={classes.moreActionsHeader}>
-							{peer.displayName}
-						</Typography>
-						<ListItem className={classes.nested}
-							disabled={!micConsumer || peer.stopPeerAudioInProgress}
-						>
-							<VolumeDownIcon />
-							<VolumeSlider className={classnames(classes.slider, classnames.setting)}
-								key={'audio-gain-slider'}
-								disabled={!micConsumer || peer.stopPeerAudioInProgress}
-								min={0}
-								max={2}
-								step={0.05}
-								value={micConsumer && micConsumer.audioGain !== undefined?
-									micConsumer.audioGain: 1}
-								valueLabelDisplay={'auto'}
-								onChange={
-									(event, value) =>
-									{
-										roomClient.setAudioGain(micConsumer, peer.id, value);
-									}}
-							/>
-							<VolumeUpIcon />
-						</ListItem>
-						<MenuItem
-							disabled={
-								peer.peerVideoInProgress ||
-								!webcamConsumer ||
-								!spotlight
-							}
-							onClick={() =>
+			<div className={classes.controls}>
+				{ screenConsumer &&
+					<IconButton
+						aria-label={intl.formatMessage({
+							id             : 'tooltip.muteScreenSharing',
+							defaultMessage : 'Mute participant share'
+						})}
+						color={ screenVisible ? 'primary' : 'secondary'}
+						disabled={ peer.peerScreenInProgress }
+						onClick={(e) =>
 							{
-								// handleMenuClose();
-
-								webcamEnabled ?
-									roomClient.modifyPeerConsumer(peer.id, 'webcam', true) :
-									roomClient.modifyPeerConsumer(peer.id, 'webcam', false);
-							}}
-						>
-							{ webcamEnabled ?
-								<VideocamIcon />
-								:
-								<VideocamOffIcon />
-							}
-							<p className={classes.moreAction}>
-								{ webcamEnabled ?
-									<FormattedMessage
-										id='tooltip.muteParticipantVideo'
-										defaultMessage='Mute video'
-									/>
-									:
-									<FormattedMessage
-										id='tooltip.unMuteParticipantVideo'
-										defaultMessage='Unmute video'
-									/>
-								}
-							</p>
-						</MenuItem>
-						<MenuItem
-							disabled={
-								peer.peerScreenInProgress ||
-								!screenConsumer ||
-								!spotlight
-							}
-							onClick={() =>
-							{
-								// handleMenuClose();
-
+								e.stopPropagation();
 								screenVisible ?
 									roomClient.modifyPeerConsumer(peer.id, 'screen', true) :
 									roomClient.modifyPeerConsumer(peer.id, 'screen', false);
 							}}
-						>
-							{ screenVisible ?
-								<ScreenIcon />
-								:
-								<ScreenOffIcon />
-							}
-							<p className={classes.moreAction}>
-								{ screenVisible ?
-									<FormattedMessage
-										id='tooltip.muteScreenSharing'
-										defaultMessage='Mute screen share'
-									/>
-									:
-									<FormattedMessage
-										id='tooltip.unMuteScreenSharing'
-										defaultMessage='Unmute screen share'
-									/>
-								}
-							</p>
-						</MenuItem>
-						<MenuItem
-							onClick={() =>
-							{
-								// handleMenuClose();
-
-								isSelected ?
-									roomClient.removeSelectedPeer(peer.id) :
-									mode === 'filmstrip' ?
-										roomClient.setSelectedPeer(peer.id) :
-										roomClient.addSelectedPeer(peer.id);
-							}}
-						>
-							{ !isSelected ?
-								<AddToQueueIcon />
-								:
-								<RemoveFromQueueIcon />
-							}
-							<p className={classes.moreAction}>
-								{ !isSelected ?
-									<FormattedMessage
-										id='tooltip.addParticipantToSpotlight'
-										defaultMessage='Add to spotlight'
-									/>
-									:
-									<FormattedMessage
-										id='tooltip.removeParticipantFromSpotlight'
-										defaultMessage='Remove from spotlight'
-									/>
-								}
-							</p>
-						</MenuItem>
-						{ isModerator &&
-							<React.Fragment>
-								<Divider />
-								<Typography
-									className={
-										classnames(classes.moreActionsHeader, classes.moderator)
-									}
-								>
-									<FormattedMessage
-										id='room.moderatoractions'
-										defaultMessage='Moderator actions'
-									/>
-								</Typography>
-								<MenuItem
-									disabled={peer.peerKickInProgress}
-									onClick={() =>
-									{
-										// handleMenuClose();
-
-										roomClient.kickPeer(peer.id);
-									}}
-								>
-									<ExitIcon />
-									<p className={classes.moreAction}>
-										<FormattedMessage
-											id='tooltip.kickParticipant'
-											defaultMessage='Kick out'
-										/>
-									</p>
-								</MenuItem>
-								<MenuItem
-									disabled={!micConsumer || peer.stopPeerAudioInProgress}
-									onClick={() =>
-									{
-										// handleMenuClose();
-
-										roomClient.mutePeer(peer.id);
-									}}
-								>
-									{ micConsumer && !micConsumer.remotelyPaused ?
-										<MicIcon />
-										:
-										<MicOffIcon />
-									}
-									<p className={classes.moreAction}>
-										<FormattedMessage
-											id='tooltip.muteParticipantAudioModerator'
-											defaultMessage='Stop audio'
-										/>
-									</p>
-								</MenuItem>
-								<MenuItem
-									disabled={!webcamConsumer || peer.stopPeerVideoInProgress}
-									onClick={() =>
-									{
-										// handleMenuClose();
-
-										roomClient.stopPeerVideo(peer.id);
-									}}
-								>
-									{ webcamConsumer && !webcamConsumer.remotelyPaused ?
-										<VideocamIcon />
-										:
-										<VideocamOffIcon />
-									}
-									<p className={classes.moreAction}>
-										<FormattedMessage
-											id='tooltip.muteParticipantVideoModerator'
-											defaultMessage='Stop video'
-										/>
-									</p>
-								</MenuItem>
-								<MenuItem
-									disabled={!screenConsumer || peer.stopPeerScreenSharingInProgress}
-									onClick={() =>
-									{
-										// handleMenuClose();
-
-										roomClient.stopPeerScreenSharing(peer.id);
-									}}
-								>
-									{ screenConsumer && !screenConsumer.remotelyPaused ?
-										<ScreenIcon />
-										:
-										<ScreenOffIcon />
-									}
-									<p className={classes.moreAction}>
-										<FormattedMessage
-											id='tooltip.muteScreenSharingModerator'
-											defaultMessage='Stop screen share'
-										/>
-									</p>
-								</MenuItem>
-								<MenuItem
-									onClick={() =>
-									{
-										// handleMenuClose();
-
-										openRolesManager(peer.id);
-									}}
-								>
-									<AccountTreeIcon />
-									<p className={classes.moreAction}>
-										<FormattedMessage
-											id='moderator.modifyPeerRoles'
-											defaultMessage='Change roles'
-										/>
-									</p>
-								</MenuItem>
-							</React.Fragment>
+					>
+						{ screenVisible ?
+							<ScreenIcon />
+							:
+							<ScreenOffIcon />
 						}
-					</Paper>
+					</IconButton>
 				}
-			</Popover>
+				<IconButton
+					aria-label={intl.formatMessage({
+						id             : 'tooltip.muteParticipant',
+						defaultMessage : 'Mute participant'
+					})}
+					color={ micEnabled ? 'primary' : 'secondary'}
+					disabled={ peer.peerAudioInProgress }
+					onClick={(e) =>
+						{
+							e.stopPropagation();
+							micEnabled ?
+								roomClient.modifyPeerConsumer(peer.id, 'mic', true) :
+								roomClient.modifyPeerConsumer(peer.id, 'mic', false);
+						}}
+				>
+					{ micEnabled ?
+						<MicIcon />
+						:
+						<MicOffIcon />
+					}
+				</IconButton>
+			</div>
 		</div>
 	);
 };
 
 ListPeer.propTypes =
 {
-	roomClient       : PropTypes.any.isRequired,
-	advancedMode     : PropTypes.bool,
-	isModerator      : PropTypes.bool,
-	spotlight        : PropTypes.bool,
-	peer             : appPropTypes.Peer.isRequired,
-	mode             : PropTypes.string.isRequired,
-	openRolesManager : PropTypes.func.isRequired,
-	micConsumer      : appPropTypes.Consumer,
-	webcamConsumer   : appPropTypes.Consumer,
-	screenConsumer   : appPropTypes.Consumer,
-	isSelected       : PropTypes.bool,
-	children         : PropTypes.object,
-	classes          : PropTypes.object.isRequired
+	roomClient     : PropTypes.any.isRequired,
+	advancedMode   : PropTypes.bool,
+	peer           : appPropTypes.Peer.isRequired,
+	micConsumer    : appPropTypes.Consumer,
+	webcamConsumer : appPropTypes.Consumer,
+	screenConsumer : appPropTypes.Consumer,
+	children       : PropTypes.object,
+	classes        : PropTypes.object.isRequired
 };
 
 const makeMapStateToProps = (initialState, { id }) =>
@@ -547,7 +246,6 @@ const makeMapStateToProps = (initialState, { id }) =>
 	{
 		return {
 			peer : state.peers[id],
-			mode : state.room.mode,
 			...getPeerConsumers(state, id)
 		};
 	};
@@ -555,27 +253,15 @@ const makeMapStateToProps = (initialState, { id }) =>
 	return mapStateToProps;
 };
 
-const mapDispatchToProps = (dispatch) =>
-{
-	return {
-		openRolesManager : (peerId) =>
-		{
-			dispatch(roomActions.setRolesManagerPeer(peerId));
-			dispatch(roomActions.setRolesManagerOpen(true));
-		}
-	};
-};
-
 export default withRoomContext(connect(
 	makeMapStateToProps,
-	mapDispatchToProps,
+	null,
 	null,
 	{
 		areStatesEqual : (next, prev) =>
 		{
 			return (
 				prev.peers === next.peers &&
-				prev.room.mode === next.room.mode &&
 				prev.consumers === next.consumers
 			);
 		}

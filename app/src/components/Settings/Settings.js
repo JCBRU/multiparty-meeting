@@ -1,26 +1,22 @@
 import React from 'react';
 import { connect } from 'react-redux';
-import { withStyles } from '@material-ui/core/styles';
-import * as roomActions from '../../store/actions/roomActions';
+import * as appPropTypes from '../appPropTypes';
+import { withStyles } from '@mui/styles';
+import { withRoomContext } from '../../RoomContext';
+import * as roomActions from '../../actions/roomActions';
+import * as settingsActions from '../../actions/settingsActions';
 import PropTypes from 'prop-types';
 import { useIntl, FormattedMessage } from 'react-intl';
-import Tabs from '@material-ui/core/Tabs';
-import Tab from '@material-ui/core/Tab';
-import MediaSettings from './MediaSettings';
-import AppearanceSettings from './AppearanceSettings';
-import AdvancedSettings from './AdvancedSettings';
-import Dialog from '@material-ui/core/Dialog';
-import DialogTitle from '@material-ui/core/DialogTitle';
-import DialogActions from '@material-ui/core/DialogActions';
-import Button from '@material-ui/core/Button';
-import Close from '@material-ui/icons/Close';
-
-const tabs =
-[
-	'media',
-	'appearance',
-	'advanced'
-];
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogActions from '@mui/material/DialogActions';
+import Button from '@mui/material/Button';
+import MenuItem from '@mui/material/MenuItem';
+import FormHelperText from '@mui/material/FormHelperText';
+import FormControl from '@mui/material/FormControl';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Select from '@mui/material/Select';
+import Checkbox from '@mui/material/Checkbox';
 
 const styles = (theme) =>
 	({
@@ -47,27 +43,99 @@ const styles = (theme) =>
 				width : '90vw'
 			}
 		},
-		tabsHeader :
+		setting :
 		{
-			flexGrow : 1
+			padding : theme.spacing(2)
+		},
+		formControl :
+		{
+			display : 'flex'
 		}
 	});
 
 const Settings = ({
-	currentSettingsTab,
-	settingsOpen,
+	roomClient,
+	room,
+	me,
+	settings,
+	onToggleAdvancedMode,
+	onTogglePermanentTopBar,
 	handleCloseSettings,
-	setSettingsTab,
+	handleChangeMode,
 	classes
 }) =>
 {
 	const intl = useIntl();
 
+	const modes = [ {
+		value : 'democratic',
+		label : intl.formatMessage({
+			id             : 'label.democratic',
+			defaultMessage : 'Democratic view'
+		})
+	}, {
+		value : 'filmstrip',
+		label : intl.formatMessage({
+			id             : 'label.filmstrip',
+			defaultMessage : 'Filmstrip view'
+		})
+	} ];
+	
+	const resolutions = [ {
+		value : 'low',
+		label : intl.formatMessage({
+			id             : 'label.low',
+			defaultMessage : 'Low'
+		})
+	},
+	{
+		value : 'medium',
+		label : intl.formatMessage({
+			id             : 'label.medium',
+			defaultMessage : 'Medium'
+		})
+	},
+	{
+		value : 'high',
+		label : intl.formatMessage({
+			id             : 'label.high',
+			defaultMessage : 'High (HD)'
+		})
+	},
+	{
+		value : 'veryhigh',
+		label : intl.formatMessage({
+			id             : 'label.veryHigh',
+			defaultMessage : 'Very high (FHD)'
+		})
+	},
+	{
+		value : 'ultra',
+		label : intl.formatMessage({
+			id             : 'label.ultra',
+			defaultMessage : 'Ultra (UHD)'
+		})
+	} ];
+
+	let webcams;
+
+	if (me.webcamDevices)
+		webcams = Object.values(me.webcamDevices);
+	else
+		webcams = [];
+
+	let audioDevices;
+
+	if (me.audioDevices)
+		audioDevices = Object.values(me.audioDevices);
+	else
+		audioDevices = [];
+
 	return (
 		<Dialog
 			className={classes.root}
-			open={settingsOpen}
-			onClose={() => handleCloseSettings(false)}
+			open={room.settingsOpen}
+			onClose={() => handleCloseSettings({ settingsOpen: false })}
 			classes={{
 				paper : classes.dialogPaper
 			}}
@@ -78,43 +146,201 @@ const Settings = ({
 					defaultMessage='Settings'
 				/>
 			</DialogTitle>
-			<Tabs
-				className={classes.tabsHeader}
-				value={tabs.indexOf(currentSettingsTab)}
-				onChange={(event, value) => setSettingsTab(tabs[value])}
-				indicatorColor='primary'
-				textColor='primary'
-				variant='fullWidth'
-			>
-				<Tab
-					label={
-						intl.formatMessage({
-							id             : 'label.media',
-							defaultMessage : 'Media'
-						})
-					}
-				/>
-				<Tab
-					label={intl.formatMessage({
-						id             : 'label.appearance',
-						defaultMessage : 'Appearance'
-					})}
-				/>
-				<Tab
-					label={intl.formatMessage({
-						id             : 'label.advanced',
-						defaultMessage : 'Advanced'
-					})}
-				/>
-			</Tabs>
-			{currentSettingsTab === 'media' && <MediaSettings />}
-			{currentSettingsTab === 'appearance' && <AppearanceSettings />}
-			{currentSettingsTab === 'advanced' && <AdvancedSettings />}
+			<form className={classes.setting} autoComplete='off'>
+				<FormControl className={classes.formControl}>
+					<Select
+						value={settings.selectedWebcam || ''}
+						onChange={(event) =>
+						{
+							if (event.target.value)
+								roomClient.changeWebcam(event.target.value);
+						}}
+						displayEmpty
+						name={intl.formatMessage({
+							id             : 'settings.camera',
+							defaultMessage : 'Camera'
+						})}
+						autoWidth
+						className={classes.selectEmpty}
+						disabled={webcams.length === 0 || me.webcamInProgress}
+					>
+						{ webcams.map((webcam, index) =>
+						{
+							return (
+								<MenuItem key={index} value={webcam.deviceId}>{webcam.label}</MenuItem>
+							);
+						})}
+					</Select>
+					<FormHelperText>
+						{ webcams.length > 0 ?
+							intl.formatMessage({
+								id             : 'settings.selectCamera',
+								defaultMessage : 'Select video device'
+							})
+							:
+							intl.formatMessage({
+								id             : 'settings.cantSelectCamera',
+								defaultMessage : 'Unable to select video device'
+							})
+						}
+					</FormHelperText>
+				</FormControl>
+			</form>
+			<form className={classes.setting} autoComplete='off'>
+				<FormControl className={classes.formControl}>
+					<Select
+						value={settings.selectedAudioDevice || ''}
+						onChange={(event) =>
+						{
+							if (event.target.value)
+								roomClient.changeAudioDevice(event.target.value);
+						}}
+						displayEmpty
+						name={intl.formatMessage({
+							id             : 'settings.audio',
+							defaultMessage : 'Audio device'
+						})}
+						autoWidth
+						className={classes.selectEmpty}
+						disabled={audioDevices.length === 0 || me.audioInProgress}
+					>
+						{ audioDevices.map((audio, index) =>
+						{
+							return (
+								<MenuItem key={index} value={audio.deviceId}>{audio.label}</MenuItem>
+							);
+						})}
+					</Select>
+					<FormHelperText>
+						{ audioDevices.length > 0 ?
+							intl.formatMessage({
+								id             : 'settings.selectAudio',
+								defaultMessage : 'Select audio device'
+							})
+							:
+							intl.formatMessage({
+								id             : 'settings.cantSelectAudio',
+								defaultMessage : 'Unable to select audio device'
+							})
+						}
+					</FormHelperText>
+				</FormControl>
+			</form>
+			<form className={classes.setting} autoComplete='off'>
+				<FormControl className={classes.formControl}>
+					<Select
+						value={settings.resolution || ''}
+						onChange={(event) =>
+						{
+							if (event.target.value)
+								roomClient.changeVideoResolution(event.target.value);
+						}}
+						name='Video resolution'
+						autoWidth
+						className={classes.selectEmpty}
+					>
+						{ resolutions.map((resolution, index) =>
+						{
+							return (
+								<MenuItem key={index} value={resolution.value}>
+									{resolution.label}
+								</MenuItem>
+							);
+						})}
+					</Select>
+					<FormHelperText>
+						<FormattedMessage
+							id='settings.resolution'
+							defaultMessage='Select your video resolution'
+						/>
+					</FormHelperText>
+				</FormControl>
+			</form>
+			<form className={classes.setting} autoComplete='off'>
+				<FormControl className={classes.formControl}>
+					<Select
+						value={room.mode || ''}
+						onChange={(event) =>
+						{
+							if (event.target.value)
+								handleChangeMode(event.target.value);
+						}}
+						name={intl.formatMessage({
+							id             : 'settings.layout',
+							defaultMessage : 'Room layout'
+						})}
+						autoWidth
+						className={classes.selectEmpty}
+					>
+						{ modes.map((mode, index) =>
+						{
+							return (
+								<MenuItem key={index} value={mode.value}>
+									{mode.label}
+								</MenuItem>
+							);
+						})}
+					</Select>
+					<FormHelperText>
+						<FormattedMessage
+							id='settings.selectRoomLayout'
+							defaultMessage='Select room layout'
+						/>
+					</FormHelperText>
+				</FormControl>
+			</form>
+			<FormControlLabel
+				className={classes.setting}
+				control={<Checkbox checked={settings.advancedMode} onChange={onToggleAdvancedMode} value='advancedMode' />}
+				label={intl.formatMessage({
+					id             : 'settings.advancedMode',
+					defaultMessage : 'Advanced mode'
+				})}
+			/>
+			{ settings.advancedMode &&
+				<React.Fragment>
+					<form className={classes.setting} autoComplete='off'>
+						<FormControl className={classes.formControl}>
+							<Select
+								value={settings.lastN || ''}
+								onChange={(event) =>
+								{
+									if (event.target.value)
+										roomClient.changeMaxSpotlights(event.target.value);
+								}}
+								name='Last N'
+								autoWidth
+								className={classes.selectEmpty}
+							>
+								{ [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 ].map((lastN) =>
+								{
+									return (
+										<MenuItem key={lastN} value={lastN}>
+											{lastN}
+										</MenuItem>
+									);
+								})}
+							</Select>
+							<FormHelperText>
+								<FormattedMessage
+									id='settings.lastn'
+									defaultMessage='Number of visible videos'
+								/>
+							</FormHelperText>
+						</FormControl>
+					</form>
+					<FormControlLabel
+						className={classes.setting}
+						control={<Checkbox checked={settings.permanentTopBar} onChange={onTogglePermanentTopBar} value='permanentTopBar' />}
+						label={intl.formatMessage({
+							id             : 'settings.permanentTopBar',
+							defaultMessage : 'Permanent top bar'
+						})}
+					/>
+				</React.Fragment>
+			}
 			<DialogActions>
-				<Button
-					onClick={() => handleCloseSettings(false)} color='primary'
-					startIcon={<Close />}
-				>
+				<Button onClick={() => handleCloseSettings({ settingsOpen: false })} color='primary'>
 					<FormattedMessage
 						id='label.close'
 						defaultMessage='Close'
@@ -127,25 +353,34 @@ const Settings = ({
 
 Settings.propTypes =
 {
-	currentSettingsTab  : PropTypes.string.isRequired,
-	settingsOpen        : PropTypes.bool.isRequired,
-	handleCloseSettings : PropTypes.func.isRequired,
-	setSettingsTab      : PropTypes.func.isRequired,
-	classes             : PropTypes.object.isRequired
+	roomClient           : PropTypes.any.isRequired,
+	me                   : appPropTypes.Me.isRequired,
+	room                 : appPropTypes.Room.isRequired,
+	settings             : PropTypes.object.isRequired,
+	onToggleAdvancedMode : PropTypes.func.isRequired,
+	onTogglePermanentTopBar : PropTypes.func.isRequired,
+	handleChangeMode     : PropTypes.func.isRequired,
+	handleCloseSettings  : PropTypes.func.isRequired,
+	classes              : PropTypes.object.isRequired
 };
 
 const mapStateToProps = (state) =>
-	({
-		currentSettingsTab : state.room.currentSettingsTab,
-		settingsOpen       : state.room.settingsOpen
-	});
-
-const mapDispatchToProps = {
-	handleCloseSettings : roomActions.setSettingsOpen,
-	setSettingsTab      : roomActions.setSettingsTab
+{
+	return {
+		me       : state.me,
+		room     : state.room,
+		settings : state.settings
+	};
 };
 
-export default connect(
+const mapDispatchToProps = {
+	onToggleAdvancedMode : settingsActions.toggleAdvancedMode,
+	onTogglePermanentTopBar : settingsActions.togglePermanentTopBar,
+	handleChangeMode     : roomActions.setDisplayMode,
+	handleCloseSettings  : roomActions.setSettingsOpen
+};
+
+export default withRoomContext(connect(
 	mapStateToProps,
 	mapDispatchToProps,
 	null,
@@ -153,9 +388,10 @@ export default connect(
 		areStatesEqual : (next, prev) =>
 		{
 			return (
-				prev.room.currentSettingsTab === next.room.currentSettingsTab &&
-				prev.room.settingsOpen === next.room.settingsOpen
+				prev.me === next.me &&
+				prev.room === next.room &&
+				prev.settings === next.settings
 			);
 		}
 	}
-)(withStyles(styles)(Settings));
+)(withStyles(styles)(Settings)));

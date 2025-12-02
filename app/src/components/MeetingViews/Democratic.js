@@ -6,7 +6,7 @@ import {
 } from '../../store/selectors';
 import classnames from 'classnames';
 import PropTypes from 'prop-types';
-import { withStyles } from '@material-ui/core/styles';
+import { withStyles } from '@mui/styles';
 import Peer from '../Containers/Peer';
 import Me from '../Containers/Me';
 

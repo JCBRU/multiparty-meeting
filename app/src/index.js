@@ -1,61 +1,69 @@
 import domready from 'domready';
 import React, { Suspense } from 'react';
-import { render } from 'react-dom';
+import { createRoot } from 'react-dom/client';
 import { Provider } from 'react-redux';
 import isElectron from 'is-electron';
-
-import { createIntl } from 'react-intl';
-import { IntlProvider } from 'react-intl-redux';
-import Cookies from 'universal-cookie';
-import { Route, HashRouter, BrowserRouter, Switch } from 'react-router-dom';
+import { createIntl, createIntlCache, RawIntlProvider } from 'react-intl';
+import { Routes, Route, HashRouter, BrowserRouter } from 'react-router-dom';
 import randomString from 'random-string';
 import Logger from './Logger';
 import debug from 'debug';
 import RoomClient from './RoomClient';
 import RoomContext from './RoomContext';
 import deviceInfo from './deviceInfo';
-import * as meActions from './store/actions/meActions';
-import * as roomActions from './store/actions/roomActions';
-import UnsupportedBrowser from './components/UnsupportedBrowser';
-import ConfigDocumentation from './components/ConfigDocumentation';
-import ConfigError from './components/ConfigError';
-import JoinDialog from './components/JoinDialog';
-import LoginDialog from './components/AccessControl/LoginDialog';
-import LoadingView from './components/Loader/LoadingView';
-import { MuiThemeProvider, createMuiTheme } from '@material-ui/core/styles';
+import * as meActions from './actions/meActions';
+import ChooseRoom from './components/ChooseRoom';
+import LoadingView from './components/LoadingView';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { PersistGate } from 'redux-persist/lib/integration/react';
-import { persistor, store } from './store/store';
+import { persistor, store } from './store';
 import { SnackbarProvider } from 'notistack';
 import * as serviceWorker from './serviceWorker';
-import { LazyPreload } from './components/Loader/LazyPreload';
-import { detectDevice } from 'mediasoup-client';
-import { recorder } from './BrowserRecorder';
+import { ReactLazyPreload } from './components/ReactLazyPreload';
+
+// import messagesEnglish from './translations/en';
+import messagesNorwegian from './translations/nb';
+import messagesGerman from './translations/de';
+import messagesHungarian from './translations/hu';
+import messagesPolish from './translations/pl';
+import messagesDanish from './translations/dk';
+import messagesFrench from './translations/fr';
+import messagesGreek from './translations/el';
+import messagesRomanian from './translations/ro';
+import messagesPortuguese from './translations/pt';
+import messagesChinese from './translations/cn';
+import messagesSpanish from './translations/es';
+import messagesCroatian from './translations/hr';
 
 import './index.css';
 
-import { config, configError } from './config';
+const App = ReactLazyPreload(() => import(/* webpackChunkName: "app" */ './components/App'));
 
-const App = LazyPreload(() => import(/* webpackChunkName: "app" */ './components/App'));
+const cache = createIntlCache();
 
-// const cache = createIntlCache();
-
-const supportedBrowsers =
+const messages =
 {
-	'windows' : {
-		'internet explorer' : '>12',
-		'microsoft edge'    : '>18'
-	},
-	'safari'                       : '>12',
-	'firefox'                      : '>=60',
-	'chrome'                       : '>=74',
-	'chromium'                     : '>=74',
-	'opera'                        : '>=62',
-	'samsung internet for android' : '>=11.1.1.52'
+	// 'en' : messagesEnglish,
+	'nb' : messagesNorwegian,
+	'de' : messagesGerman,
+	'hu' : messagesHungarian,
+	'pl' : messagesPolish,
+	'dk' : messagesDanish,
+	'fr' : messagesFrench,
+	'el' : messagesGreek,
+	'ro' : messagesRomanian,
+	'pt' : messagesPortuguese,
+	'zh' : messagesChinese,
+	'es' : messagesSpanish,
+	'hr' : messagesCroatian
 };
 
-const intl = createIntl({ locale: 'en', defaultLocale: 'en' });
+const locale = navigator.language.split(/[-_]/)[0]; // language without region code
 
-recorder.intl = intl;
+const intl = createIntl({
+	locale,
+	messages : messages[locale]
+}, cache);
 
 if (process.env.REACT_APP_DEBUG === '*' || process.env.NODE_ENV !== 'production')
 {
@@ -66,9 +74,9 @@ const logger = new Logger();
 
 let roomClient;
 
-RoomClient.init({ store });
+RoomClient.init({ store, intl });
 
-const theme = createMuiTheme(config.theme);
+const theme = createTheme(window.config.theme);
 
 let Router;
 
@@ -94,134 +102,19 @@ function run()
 
 	const accessCode = parameters.get('code');
 	const produce = parameters.get('produce') !== 'false';
+	const useSimulcast = parameters.get('simulcast') === 'true';
+	const useSharingSimulcast = parameters.get('sharingSimulcast') === 'true';
 	const forceTcp = parameters.get('forceTcp') === 'true';
 	const displayName = parameters.get('displayName');
 	const muted = parameters.get('muted') === 'true';
-	const headless = parameters.get('headless');
-	const hideNoVideoParticipants = parameters.get('hideNoVideoParticipants');
-	const filmstripmode = parameters.get('filmstrip'); // filmstrip mode by default
-	const acceptCookie = parameters.get('acceptCookie'); // auto accept cookie popup
-	const hideSelfView = parameters.get('hideSelfView');
-
-	if (filmstripmode === 'true')
-	{
-		store.dispatch(
-			roomActions.setDisplayMode('filmstrip')
-		);
-	}
-
-	if (acceptCookie === 'true')
-	{
-		const cookies = new Cookies();
-
-		cookies.set('CookieConsent', 'true', { path: '/' });
-	}
-
-	const showConfigDocumentationPath = parameters.get('config') === 'true';
-
-	const { pathname } = window.location;
-
-	let basePath = pathname.substring(0, pathname.lastIndexOf('/'));
-
-	if (!basePath)
-		basePath = '/';
-
+	
 	// Get current device.
 	const device = deviceInfo();
-
-	let unsupportedBrowser = false;
-
-	let webrtcUnavailable = false;
-
-	if (detectDevice() === undefined)
-	{
-		logger.error('Your browser is not supported [deviceInfo:"%o"]', device);
-
-		unsupportedBrowser = true;
-	}
-	else if (
-		navigator.mediaDevices === undefined ||
-		navigator.mediaDevices.getUserMedia === undefined ||
-		window.RTCPeerConnection === undefined
-	)
-	{
-		logger.error('Your browser is not supported [deviceInfo:"%o"]', device);
-
-		webrtcUnavailable = true;
-	}
-	else if (
-		!device.bowser.satisfies(
-			config.supportedBrowsers || supportedBrowsers
-		)
-	)
-	{
-		logger.error(
-			'Your browser is not supported [deviceInfo:"%o"]',
-			device
-		);
-
-		unsupportedBrowser = true;
-	}
-	else
-	{
-		logger.debug('Your browser is supported [deviceInfo:"%o"]', device);
-	}
-
-	if (unsupportedBrowser || webrtcUnavailable)
-	{
-		render(
-			<Provider store={store}>
-				<MuiThemeProvider theme={theme}>
-					<IntlProvider value={intl}>
-						<UnsupportedBrowser
-							webrtcUnavailable={webrtcUnavailable}
-							platform={device.platform}
-						/>
-					</IntlProvider>
-				</MuiThemeProvider>
-			</Provider>,
-			document.getElementById('edumeet')
-		);
-
-		return;
-	}
-
-	if (showConfigDocumentationPath)
-	{
-		render(
-			<Provider store={store}>
-				<MuiThemeProvider theme={theme}>
-					<IntlProvider value={intl}>
-						<ConfigDocumentation />
-					</IntlProvider>
-				</MuiThemeProvider>
-			</Provider>,
-			document.getElementById('edumeet')
-		);
-
-		return;
-	}
-
-	if (configError)
-	{
-		render(
-			<Provider store={store}>
-				<MuiThemeProvider theme={theme}>
-					<IntlProvider value={intl}>
-						<ConfigError configError={configError} />
-					</IntlProvider>
-				</MuiThemeProvider>
-			</Provider>,
-			document.getElementById('edumeet')
-		);
-
-		return;
-	}
 
 	store.dispatch(
 		meActions.setMe({
 			peerId,
-			loginEnabled : config.loginEnabled
+			loginEnabled : window.config.loginEnabled
 		})
 	);
 
@@ -230,51 +123,40 @@ function run()
 			peerId,
 			accessCode,
 			device,
+			useSimulcast,
+			useSharingSimulcast,
 			produce,
-			headless,
 			forceTcp,
 			displayName,
-			muted,
-			basePath
+			muted
 		});
-
-	if (hideNoVideoParticipants === 'true')
-	{
-		roomClient.setHideNoVideoParticipants(true);
-	}
-
-	if (hideSelfView === 'true')
-	{
-		store.dispatch(roomActions.setHideSelfView(hideSelfView));
-	}
 
 	global.CLIENT = roomClient;
 
-	render(
+	const container = document.getElementById('multiparty-meeting');
+	const root = createRoot(container);
+
+	root.render(
 		<Provider store={store}>
-			<MuiThemeProvider theme={theme}>
-				<IntlProvider value={intl}>
+			<ThemeProvider theme={theme}>
+				<RawIntlProvider value={intl}>
 					<PersistGate loading={<LoadingView />} persistor={persistor}>
 						<RoomContext.Provider value={roomClient}>
 							<SnackbarProvider>
-								<Router basename={basePath}>
+								<Router>
 									<Suspense fallback={<LoadingView />}>
-										<React.Fragment>
-											<Switch>
-												<Route exact path='/' component={JoinDialog} />
-												<Route exact path='/login_dialog' component={LoginDialog} />
-												<Route path='/:id' component={App} />
-											</Switch>
-										</React.Fragment>
+										<Routes>
+											<Route path='/' element={<ChooseRoom />} />
+											<Route path='/:id' element={<App />} />
+										</Routes>
 									</Suspense>
 								</Router>
 							</SnackbarProvider>
 						</RoomContext.Provider>
 					</PersistGate>
-				</IntlProvider>
-			</MuiThemeProvider>
-		</Provider>,
-		document.getElementById('edumeet')
+				</RawIntlProvider>
+			</ThemeProvider>
+		</Provider>
 	);
 }
 

@@ -1,10 +1,9 @@
 import React from 'react';
 import PropTypes from 'prop-types';
-import { withStyles } from '@material-ui/core/styles';
-import Paper from '@material-ui/core/Paper';
-import Moderator from './Menu/Moderator';
-import List from './List/List';
-import Input from './Menu/Input';
+import { withStyles } from '@mui/styles';
+import Paper from '@mui/material/Paper';
+import MessageList from './MessageList';
+import ChatInput from './ChatInput';
 
 const styles = () =>
 	({
@@ -26,9 +25,8 @@ const Chat = (props) =>
 
 	return (
 		<Paper className={classes.root}>
-			<Moderator />
-			<List />
-			<Input />
+			<MessageList />
+			<ChatInput />
 		</Paper>
 	);
 };

@@ -1,30 +1,25 @@
 import React from 'react';
 import { connect } from 'react-redux';
-import { raisedHandsSelector } from '../../store/selectors';
 import PropTypes from 'prop-types';
-import { withStyles } from '@material-ui/core/styles';
-import * as toolareaActions from '../../store/actions/toolareaActions';
-import * as settingsActions from '../../store/actions/settingsActions';
+import { withStyles } from '@mui/styles';
+import * as toolareaActions from '../../actions/toolareaActions';
 import { useIntl } from 'react-intl';
-import AppBar from '@material-ui/core/AppBar';
-import Tabs from '@material-ui/core/Tabs';
-import Tab from '@material-ui/core/Tab';
-import Badge from '@material-ui/core/Badge';
+import AppBar from '@mui/material/AppBar';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
+import Badge from '@mui/material/Badge';
 import Chat from './Chat/Chat';
+import FileSharing from './FileSharing/FileSharing';
 import ParticipantList from './ParticipantList/ParticipantList';
-import ChevronLeftIcon from '@material-ui/icons/ChevronLeft';
-import ChevronRightIcon from '@material-ui/icons/ChevronRight';
-import IconButton from '@material-ui/core/IconButton';
-import ChatIcon from '@material-ui/icons/Chat';
-import GroupIcon from '@material-ui/icons/Group';
-
-import { ReactComponent as PinIcon } from '../../images/pin-icon-baseline.svg';
-import { ReactComponent as UnpinIcon } from '../../images/pin-icon-outline.svg';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import IconButton from '@mui/material/IconButton';
 
 const tabs =
 [
-	'users',
-	'chat'
+	'chat',
+	'files',
+	'users'
 ];
 
 const styles = (theme) =>
@@ -56,15 +51,10 @@ const MeetingDrawer = (props) =>
 		currentToolTab,
 		unreadMessages,
 		unreadFiles,
-		raisedHands,
 		closeDrawer,
 		setToolTab,
 		classes,
-		theme,
-		drawerOverlayed,
-		toggleDrawerOverlayed,
-		browser
-
+		theme
 	} = props;
 
 	return (
@@ -84,42 +74,37 @@ const MeetingDrawer = (props) =>
 				>
 					<Tab
 						label={
-							<Badge color='secondary' badgeContent={raisedHands}>
-								<GroupIcon />&nbsp;
-								{(browser.platform !== 'mobile') && intl.formatMessage({
-									id             : 'label.participants',
-									defaultMessage : 'Participants'
-								})}
-							</Badge>
-						}
-					/>
-					<Tab
-						label={
-							<Badge
-								color='secondary'
-								badgeContent={unreadMessages+unreadFiles}
-							>
-								<ChatIcon />&nbsp;
-								{(browser.platform !== 'mobile') && intl.formatMessage({
+							<Badge color='secondary' badgeContent={unreadMessages}>
+								{intl.formatMessage({
 									id             : 'label.chat',
 									defaultMessage : 'Chat'
 								})}
 							</Badge>
 						}
 					/>
+					<Tab
+						label={
+							<Badge color='secondary' badgeContent={unreadFiles}>
+								{intl.formatMessage({
+									id             : 'label.filesharing',
+									defaultMessage : 'File sharing'
+								})}
+							</Badge>
+						}
+					/>
+					<Tab
+						label={intl.formatMessage({
+							id             : 'label.participants',
+							defaultMessage : 'Participants'
+						})}
+					/>
 				</Tabs>
-				{browser.platform !== 'mobile' && (
-					<React.Fragment>
-						<IconButton onClick={toggleDrawerOverlayed}>
-							{ drawerOverlayed ? <UnpinIcon /> : <PinIcon /> }
-						</IconButton>
-						<IconButton onClick={closeDrawer}>
-							{theme.direction === 'ltr' ? <ChevronLeftIcon /> : <ChevronRightIcon />}
-						</IconButton>
-					</React.Fragment>
-				)}
+				<IconButton onClick={closeDrawer}>
+					{theme.direction === 'ltr' ? <ChevronLeftIcon /> : <ChevronRightIcon />}
+				</IconButton>
 			</AppBar>
 			{currentToolTab === 'chat' && <Chat />}
+			{currentToolTab === 'files' && <FileSharing />}
 			{currentToolTab === 'users' && <ParticipantList />}
 		</div>
 	);
@@ -127,35 +112,23 @@ const MeetingDrawer = (props) =>
 
 MeetingDrawer.propTypes =
 {
-	currentToolTab        : PropTypes.string.isRequired,
-	setToolTab            : PropTypes.func.isRequired,
-	unreadMessages        : PropTypes.number.isRequired,
-	unreadFiles           : PropTypes.number.isRequired,
-	raisedHands           : PropTypes.number.isRequired,
-	closeDrawer           : PropTypes.func.isRequired,
-	classes               : PropTypes.object.isRequired,
-	theme                 : PropTypes.object.isRequired,
-	drawerOverlayed       : PropTypes.bool.isRequired,
-	toggleDrawerOverlayed : PropTypes.func.isRequired,
-	browser               : PropTypes.object.isRequired
+	currentToolTab : PropTypes.string.isRequired,
+	setToolTab     : PropTypes.func.isRequired,
+	unreadMessages : PropTypes.number.isRequired,
+	unreadFiles    : PropTypes.number.isRequired,
+	closeDrawer    : PropTypes.func.isRequired,
+	classes        : PropTypes.object.isRequired,
+	theme          : PropTypes.object.isRequired
 };
 
-const mapStateToProps = (state) =>
-{
-	return {
-		currentToolTab  : state.toolarea.currentToolTab,
-		unreadMessages  : state.toolarea.unreadMessages,
-		unreadFiles     : state.toolarea.unreadFiles,
-		raisedHands     : raisedHandsSelector(state),
-		drawerOverlayed : state.settings.drawerOverlayed,
-		browser         : state.me.browser
-
-	};
-};
+const mapStateToProps = (state) => ({
+	currentToolTab : state.toolarea.currentToolTab,
+	unreadMessages : state.toolarea.unreadMessages,
+	unreadFiles    : state.toolarea.unreadFiles
+});
 
 const mapDispatchToProps = {
-	setToolTab            : toolareaActions.setToolTab,
-	toggleDrawerOverlayed : settingsActions.toggleDrawerOverlayed
+	setToolTab : toolareaActions.setToolTab
 };
 
 export default connect(
@@ -168,11 +141,7 @@ export default connect(
 			return (
 				prev.toolarea.currentToolTab === next.toolarea.currentToolTab &&
 				prev.toolarea.unreadMessages === next.toolarea.unreadMessages &&
-				prev.toolarea.drawerOverlayed === next.toolarea.drawerOverlayed &&
-				prev.toolarea.unreadFiles === next.toolarea.unreadFiles &&
-				prev.peers === next.peers &&
-				prev.me.browser === next.me.browser
-
+				prev.toolarea.unreadFiles === next.toolarea.unreadFiles
 			);
 		}
 	}

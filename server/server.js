@@ -18,11 +18,27 @@ const bcrypt = require('bcrypt');
 const fs = require('fs');
 const http = require('http');
 const https = require('https');
+const tlsModule = require('tls');
 
+// SPDY support - conditionally loaded for Node.js < 15
+let spdy;
 if (process.versions.node.split('.')[0] < 15)
 {
 	/* eslint-disable no-unused-vars */
-	const spdy = require('spdy');
+	spdy = require('spdy');
+}
+else
+{
+	// For Node.js 15+, spdy may have issues, but we'll try it with fallback
+	try
+	{
+		spdy = require('spdy');
+	}
+	catch (error)
+	{
+		// spdy will be undefined, we'll use https.createServer as fallback
+		spdy = undefined;
+	}
 }
 
 const express = require('express');
@@ -40,9 +56,36 @@ const imsLti = require('ims-lti');
 const SAMLStrategy = require('passport-saml').Strategy;
 const LocalStrategy = require('passport-local').Strategy;
 const redis = require('redis');
+// Support des variables d'environnement pour Docker
+// Si REDIS_HOST est défini via environnement (Docker), l'utiliser
+let redisOptions = { ...config.redisOptions };
+
+if (process.env.REDIS_HOST && Object.keys(config.redisOptions).length === 0)
+{
+	// Configuration simple pour Docker
+	redisOptions = {
+		socket: {
+			host: process.env.REDIS_HOST,
+			port: parseInt(process.env.REDIS_PORT || '6379')
+		}
+	};
+}
+else if (process.env.REDIS_HOST && !config.redisOptions.socket && !config.redisOptions.host)
+{
+	// Override avec les variables d'environnement si pas déjà configuré
+	redisOptions = {
+		...config.redisOptions,
+		socket: {
+			host: process.env.REDIS_HOST,
+			port: parseInt(process.env.REDIS_PORT || '6379')
+		}
+	};
+}
+
+const redisClient = redis.createClient(redisOptions);
 const { Issuer, Strategy, custom } = require('openid-client');
 const expressSession = require('express-session');
-const RedisStore = require('connect-redis')(expressSession);
+const RedisStore = require('connect-redis').default;
 const sharedSession = require('express-socket.io-session');
 const { v4: uuidv4 } = require('uuid');
 
@@ -52,8 +95,6 @@ if (configError)
 	console.error(`Invalid config file: ${configError}`);
 	process.exit(-1);
 }
-
-const redisClient = redis.createClient(config.redisOptions);
 
 /* eslint-disable no-console */
 console.log('- process.env.DEBUG:', process.env.DEBUG);
@@ -80,11 +121,19 @@ const rooms = new Map();
 const peers = new Map();
 
 // TLS server configuration.
-const tls =
+// Adapted for Node.js 23+ compatibility
+// secureOptions must use numeric constants, not string 'tlsv12'
+const tlsOptions =
 {
 	cert          : fs.readFileSync(config.tls.cert),
 	key           : fs.readFileSync(config.tls.key),
-	secureOptions : 'tlsv12',
+	// Use numeric constant for TLS 1.2 minimum (compatible with Node.js 23)
+	// If tls.constants is available, use it; otherwise use numeric value
+	secureOptions : (tlsModule.constants && typeof tlsModule.constants.SSL_OP_NO_SSLv2 === 'number') 
+		? (tlsModule.constants.SSL_OP_NO_SSLv2 | tlsModule.constants.SSL_OP_NO_SSLv3 | tlsModule.constants.SSL_OP_NO_TLSv1 | tlsModule.constants.SSL_OP_NO_TLSv1_1)
+		: 0x08000000, // Fallback: SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1
+	minVersion    : 'TLSv1.2', // Explicit minimum TLS version (Node.js 12+)
+	maxVersion    : 'TLSv1.3', // Allow TLS 1.3 (Node.js 12+)
 	ciphers       :
 		[
 			'ECDHE-ECDSA-AES128-GCM-SHA256',
@@ -101,7 +150,27 @@ const tls =
 
 const app = express();
 
-app.use(helmet.hsts());
+// Trust proxy for reverse proxy / load balancer setup
+// This allows Express to trust the X-Forwarded-* headers
+if (config.trustProxy)
+{
+	app.set('trust proxy', config.trustProxy);
+}
+else
+{
+	app.set('trust proxy', true); // Default to true for reverse proxy support
+}
+
+// Configure helmet for reverse proxy
+app.use(helmet({
+	hsts: {
+		maxAge: 31536000,
+		includeSubDomains: true,
+		preload: true
+	},
+	contentSecurityPolicy: false // May need to be configured based on your setup
+}));
+
 const sharedCookieParser = cookieParser();
 
 app.use(sharedCookieParser);
@@ -113,11 +182,15 @@ const session = expressSession({
 	name              : config.cookieName,
 	resave            : true,
 	saveUninitialized : true,
-	store             : new RedisStore({ client: redisClient }),
+	store             : new RedisStore({ 
+		client: redisClient,
+		prefix: 'sess:'
+	}),
 	cookie            : {
-		secure   : true,
+		secure   : config.behindReverseProxy ? true : true, // Secure cookies (HTTPS only)
 		httpOnly : true,
-		maxAge   : 60 * 60 * 1000 // Expire after 1 hour since last request from user
+		maxAge   : 60 * 60 * 1000, // Expire after 1 hour since last request from user
+		sameSite : 'lax' // CSRF protection
 	}
 });
 
@@ -149,6 +222,10 @@ async function run()
 {
 	try
 	{
+		// Connect to Redis
+		await redisClient.connect();
+		logger.info('Connected to Redis');
+
 		// Open the interactive server.
 		await interactiveServer(rooms, peers);
 
@@ -611,17 +688,35 @@ async function runHttpsServer()
 {
 	app.use(compression());
 
+	// Health check endpoint for load balancer (Caddy, Nginx, etc.)
+	app.get('/health', (req, res) =>
+	{
+		res.status(200).json({ 
+			status: 'ok', 
+			timestamp: new Date().toISOString(),
+			rooms: rooms.size,
+			peers: peers.size
+		});
+	});
+
 	app.use('/.well-known/acme-challenge', express.static('dist/public/.well-known/acme-challenge'));
 
 	app.all('*', async (req, res, next) =>
 	{
-		if (req.secure || config.httpOnly)
+		// Check if request is secure (either directly or via reverse proxy)
+		const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https' || 
+			(req.headers['x-forwarded-ssl'] === 'on');
+		
+		if (isSecure || config.httpOnly || config.behindReverseProxy)
 		{
 			let ltiURL;
 
 			try
 			{
-				ltiURL = new URL(`${req.protocol}://${req.get('host')}${req.originalUrl}`);
+				const protocol = config.behindReverseProxy ? 
+					(req.headers['x-forwarded-proto'] || 'https') : req.protocol;
+				const host = req.get('host') || req.headers['x-forwarded-host'] || req.hostname;
+				ltiURL = new URL(`${protocol}://${host}${req.originalUrl}`);
 			}
 			catch (error)
 			{
@@ -644,8 +739,17 @@ async function runHttpsServer()
 			else
 				return next();
 		}
+		else if (!config.behindReverseProxy)
+		{
+			// Only redirect if not behind reverse proxy (proxy should handle redirects)
+			const protocol = req.headers['x-forwarded-proto'] || 'https';
+			const host = req.get('host') || req.headers['x-forwarded-host'] || req.hostname;
+			res.redirect(`${protocol}://${host}${req.url}`);
+		}
 		else
-			res.redirect(`https://${req.hostname}${req.url}`);
+		{
+			return next();
+		}
 
 	});
 
@@ -669,15 +773,24 @@ async function runHttpsServer()
 		// spdy is not working anymore with node.js > 15 and express 5 
 		// is not ready yet for http2
 		// https://github.com/spdy-http2/node-spdy/issues/380
+		// For Node.js 23+, we use tlsOptions with proper TLS configuration
 		if (typeof(spdy) === 'undefined')
 		{
 			logger.info('Found node.js version >= 15 disabling spdy / http2 and using node.js/https module');
-			mainListener = https.createServer(tls, app);
+			mainListener = https.createServer(tlsOptions, app);
 		}
 		else
 		{
-			/* eslint-disable no-undef */
-			mainListener = spdy.createServer(tls, app);
+			// Try spdy first, fallback to https if it fails (Node.js 23 compatibility)
+			try
+			{
+				mainListener = spdy.createServer(tlsOptions, app);
+			}
+			catch (error)
+			{
+				logger.warn('spdy.createServer failed, falling back to native https: %o', error);
+				mainListener = https.createServer(tlsOptions, app);
+			}
 		}
 
 		// http -> https redirect server
@@ -725,7 +838,13 @@ function isPathAlreadyTaken(actualUrl)
  */
 async function runWebSocketServer()
 {
-	io = require('socket.io')(mainListener, { cookie: false });
+	const { Server } = require('socket.io');
+	io = new Server(mainListener, {
+		cors: {
+			origin: '*', // Allow all origins for development, restrict in production
+			methods: ['GET', 'POST']
+		}
+	});
 
 	io.use(
 		sharedSession(session, sharedCookieParser, {})

@@ -1,57 +1,79 @@
 import React from 'react';
 import { connect } from 'react-redux';
-import { withStyles } from '@material-ui/core/styles';
-import { withRoomContext } from '../../../RoomContext';
+import { withStyles } from '@mui/styles';
 import classnames from 'classnames';
 import PropTypes from 'prop-types';
 import * as appPropTypes from '../../appPropTypes';
-import { useIntl } from 'react-intl';
-import IconButton from '@material-ui/core/IconButton';
-import Tooltip from '@material-ui/core/Tooltip';
-import PanIcon from '@material-ui/icons/PanTool';
 import EmptyAvatar from '../../../images/avatar-empty.jpeg';
+import HandIcon from '../../../images/icon-hand-white.svg';
 
 const styles = (theme) =>
 	({
 		root :
 		{
+			padding  : theme.spacing(1),
 			width    : '100%',
 			overflow : 'hidden',
 			cursor   : 'auto',
 			display  : 'flex'
 		},
+		listPeer :
+		{
+			display : 'flex'
+		},
 		avatar :
 		{
 			borderRadius : '50%',
-			height       : '2rem',
-			width        : '2rem',
-			objectFit    : 'cover',
-			marginTop    : theme.spacing(0.5)
+			height       : '2rem'
 		},
 		peerInfo :
 		{
 			fontSize    : '1rem',
+			border      : 'none',
 			display     : 'flex',
 			paddingLeft : theme.spacing(1),
 			flexGrow    : 1,
 			alignItems  : 'center'
 		},
-		buttons :
+		indicators :
 		{
-			padding : theme.spacing(1)
+			left           : 0,
+			top            : 0,
+			display        : 'flex',
+			flexDirection  : 'row',
+			justifyContent : 'flex-start',
+			alignItems     : 'center',
+			transition     : 'opacity 0.3s'
 		},
-		green :
+		icon :
 		{
-			color : 'rgba(0, 153, 0, 1)'
+			flex               : '0 0 auto',
+			margin             : '0.3rem',
+			borderRadius       : 2,
+			backgroundPosition : 'center',
+			backgroundSize     : '75%',
+			backgroundRepeat   : 'no-repeat',
+			backgroundColor    : 'rgba(0, 0, 0, 0.5)',
+			transitionProperty : 'opacity, background-color',
+			transitionDuration : '0.15s',
+			width              : 'var(--media-control-button-size)',
+			height             : 'var(--media-control-button-size)',
+			opacity            : 0.85,
+			'&:hover'          :
+			{
+				opacity : 1
+			},
+			'&.raise-hand' :
+			{
+				backgroundImage : `url(${HandIcon})`,
+				opacity         : 1
+			}
 		}
 	});
 
 const ListMe = (props) =>
 {
-	const intl = useIntl();
-
 	const {
-		roomClient,
 		me,
 		settings,
 		classes
@@ -60,49 +82,29 @@ const ListMe = (props) =>
 	const picture = me.picture || EmptyAvatar;
 
 	return (
-		<div className={classes.root}>
-			<img alt='My avatar' className={classes.avatar} src={picture} />
+		<li className={classes.root}>
+			<div className={classes.listPeer}>
+				<img alt='My avatar' className={classes.avatar} src={picture} />
 
-			<div className={classes.peerInfo}>
-				{settings.displayName}
-			</div>
-			<Tooltip
-				title={intl.formatMessage({
-					id             : 'tooltip.raisedHand',
-					defaultMessage : 'Raise hand'
-				})}
-				placement='bottom'
-			>
-				<IconButton
-					aria-label={intl.formatMessage({
-						id             : 'tooltip.raisedHand',
-						defaultMessage : 'Raise hand'
-					})}
-					className={
-						classnames(me.raisedHand ? classes.green : null, classes.buttons)
+				<div className={classes.peerInfo}>
+					{settings.displayName}
+				</div>
+
+				<div className={classes.indicators}>
+					{ me.raisedHand &&
+						<div className={classnames(classes.icon, 'raise-hand')} />
 					}
-					disabled={me.raisedHandInProgress}
-					color='primary'
-					onClick={(e) =>
-					{
-						e.stopPropagation();
-
-						roomClient.setRaisedHand(!me.raisedHand);
-					}}
-				>
-					<PanIcon />
-				</IconButton>
-			</Tooltip>
-		</div>
+				</div>
+			</div>
+		</li>
 	);
 };
 
 ListMe.propTypes =
 {
-	roomClient : PropTypes.object.isRequired,
-	me         : appPropTypes.Me.isRequired,
-	settings   : PropTypes.object.isRequired,
-	classes    : PropTypes.object.isRequired
+	me       : appPropTypes.Me.isRequired,
+	settings : PropTypes.object.isRequired,
+	classes  : PropTypes.object.isRequired
 };
 
 const mapStateToProps = (state) => ({
@@ -110,7 +112,7 @@ const mapStateToProps = (state) => ({
 	settings : state.settings
 });
 
-export default withRoomContext(connect(
+export default connect(
 	mapStateToProps,
 	null,
 	null,
@@ -123,4 +125,4 @@ export default withRoomContext(connect(
 			);
 		}
 	}
-)(withStyles(styles)(ListMe)));
+)(withStyles(styles)(ListMe));

@@ -27,6 +27,22 @@ jobs:
           # Cache disabled - lock files (yarn.lock) are in subdirectories app/ and server/
           # and we use npm install, not yarn
 
+      - name: Cache app node_modules
+        uses: actions/cache@v4
+        with:
+          path: edumeet/app/node_modules
+          key: ${{ runner.os }}-node-${{ matrix.node-version }}-app-${{ hashFiles('edumeet/app/yarn.lock', 'edumeet/app/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ matrix.node-version }}-app-
+
+      - name: Cache server node_modules
+        uses: actions/cache@v4
+        with:
+          path: edumeet/server/node_modules
+          key: ${{ runner.os }}-node-${{ matrix.node-version }}-server-${{ hashFiles('edumeet/server/yarn.lock', 'edumeet/server/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ matrix.node-version }}-server-
+
       - name: Get eduMEET version
         id: get-version
         run: |
@@ -47,13 +63,23 @@ jobs:
 
           # Build frontend
           cd app
-          npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+          # Use npm ci if node_modules exists (from cache), otherwise npm install
+          if [ -d "node_modules" ]; then
+            npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+          else
+            npm install --legacy-peer-deps
+          fi
           npm run build
           cd ..
 
           # Build server (if build script exists, otherwise just install dependencies)
           cd server
-          npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+          # Use npm ci if node_modules exists (from cache), otherwise npm install
+          if [ -d "node_modules" ]; then
+            npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+          else
+            npm install --legacy-peer-deps
+          fi
           # Check if build script exists
           if npm run | grep -q "^  build"; then
             npm run build
